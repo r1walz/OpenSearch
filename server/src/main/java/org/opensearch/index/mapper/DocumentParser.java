@@ -32,12 +32,15 @@
 
 package org.opensearch.index.mapper;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexableField;
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.Version;
 import org.opensearch.common.Strings;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.common.geo.GeoPoint;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.time.DateFormatter;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
@@ -63,6 +66,18 @@ import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
  */
 final class DocumentParser {
 
+    private static final Logger logger = LogManager.getLogger(DocumentParser.class);
+
+    private static final String[] NYC_HEADER_ARRAY = {
+        "total_amount", "improvement_surcharge", "pickup_location", "pickup_datetime", "trip_type", "dropoff_datetime",
+        "rate_code_id", "tolls_amount", "dropoff_location", "passenger_count", "fare_amount", "extra", "trip_distance",
+        "tip_amount", "store_and_fwd_flag", "payment_type", "mta_tax", "vendor_id"
+    };
+
+    private static final String[] SIMPLE_HEADER_ARRAY = {
+        "field0", "field1", "field2", "field3", "field4"
+    };
+
     private final IndexSettings indexSettings;
     private final DocumentMapperParser docMapperParser;
     private final DocumentMapper docMapper;
@@ -77,6 +92,10 @@ final class DocumentParser {
         final Mapping mapping = docMapper.mapping();
         final ParseContext.InternalParseContext context;
         final XContentType xContentType = source.getXContentType();
+
+        logger.info("csvPoc::parseDocument => {}", mapping);
+        logger.info("csvPoc::parseDocument => {}", xContentType);
+        logger.info("csvPoc::parseDocument => {}", mapping.metadataMappersMap);
 
         try (
             XContentParser parser = XContentHelper.createParser(
@@ -399,6 +418,7 @@ final class DocumentParser {
 
         ObjectMapper.Nested nested = mapper.nested();
         if (nested.isNested()) {
+            logger.info("csvPoc::parseObjectOrNested => {}", true);
             context = nestedContext(context, mapper);
         }
 
@@ -408,6 +428,8 @@ final class DocumentParser {
         }
         if (token == XContentParser.Token.START_OBJECT) {
             // if we are just starting an OBJECT, advance, this is the object we are parsing, we need the name first
+            logger.info("csvPoc::parseDocument => {}", token);
+
             token = parser.nextToken();
         }
 
@@ -425,9 +447,12 @@ final class DocumentParser {
         String currentFieldName,
         XContentParser.Token token
     ) throws IOException {
+        logger.info("csvPoc::innerParseObject => token={}, currentName={}", token, parser.currentName());
         assert token == XContentParser.Token.FIELD_NAME || token == XContentParser.Token.END_OBJECT;
         String[] paths = null;
+        logger.info("csvPoc::innerParseObject => starting parsing");
         while (token != XContentParser.Token.END_OBJECT) {
+            logger.info("csvPoc::innerParseObject => token={}, currentName={}", token, parser.currentName());
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
                 paths = splitAndValidatePath(currentFieldName);
@@ -659,15 +684,29 @@ final class DocumentParser {
             );
         }
         Mapper mapper = getMapper(context, parentMapper, currentFieldName, paths);
-        if (mapper != null) {
-            parseObjectOrField(context, mapper);
+
+        logger.info("csvPoC::parseValue => currentFieldName={}, token={}, paths={}", currentFieldName, token, paths);
+
+        if (currentFieldName.contains("csv_data_row")) {
+            String[] mapperArray = {};
+
+            if (context.sourceToParse().index().equalsIgnoreCase("nyc_taxis_csv")) {
+                mapperArray = NYC_HEADER_ARRAY;
+            } else if (context.sourceToParse().index().equalsIgnoreCase("simple_data_csv")) {
+                mapperArray = SIMPLE_HEADER_ARRAY;
+            }
+            parseCsvRow(context, parentMapper, mapperArray);
         } else {
-            currentFieldName = paths[paths.length - 1];
-            Tuple<Integer, ObjectMapper> parentMapperTuple = getDynamicParentMapper(context, paths, parentMapper);
-            parentMapper = parentMapperTuple.v2();
-            parseDynamicValue(context, parentMapper, currentFieldName, token);
-            for (int i = 0; i < parentMapperTuple.v1(); i++) {
-                context.path().remove();
+            if (mapper != null) {
+                parseObjectOrField(context, mapper);
+            } else {
+                currentFieldName = paths[paths.length - 1];
+                Tuple<Integer, ObjectMapper> parentMapperTuple = getDynamicParentMapper(context, paths, parentMapper);
+                parentMapper = parentMapperTuple.v2();
+                parseDynamicValue(context, parentMapper, currentFieldName, token);
+                for (int i = 0; i < parentMapperTuple.v1(); i++) {
+                    context.path().remove();
+                }
             }
         }
     }
@@ -993,5 +1032,27 @@ final class DocumentParser {
             }
         }
         return objectMapper.getMapper(subfields[subfields.length - 1]);
+    }
+
+    private static void parseCsvRow(final ParseContext context, ObjectMapper parentMapper, String[] mapperArray) throws IOException {
+        String value = context.parser().textOrNull();
+        String[] values = value.split("\\|");
+
+        for (int i = 0; i < values.length; ++i) {
+            FieldMapper fieldMapper = (FieldMapper) parentMapper.getMapper(mapperArray[i]);
+            logger.info("csvPoC::parseCsvRow => fieldname={}, value={}, fieldMapper={}", mapperArray[i], values[i], fieldMapper);
+
+            if (fieldMapper instanceof GeoPointFieldMapper) {
+                String[] val = values[i].substring(1, values[i].length() - 1).split(",");
+                List<GeoPoint> geoPoint = new ArrayList<>();
+                GeoPoint gp = new GeoPoint(Double.parseDouble(val[0]), Double.parseDouble(val[1]));
+                geoPoint.add(gp);
+                logger.info("csvPoC::parseCsvRow => geoPoint={}", geoPoint);
+            } else {
+                ParseContext csvValueContext = context.createExternalValueContext(values[i]);
+                fieldMapper.parse(csvValueContext);
+            }
+            parseCopyFields(context, fieldMapper.copyTo().copyToFields());
+        }
     }
 }
