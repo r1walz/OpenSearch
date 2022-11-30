@@ -36,6 +36,7 @@ import org.opensearch.common.xcontent.cbor.CborXContent;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.common.xcontent.smile.SmileXContent;
 import org.opensearch.common.xcontent.yaml.YamlXContent;
+import org.opensearch.common.xcontent.csv.CsvXContent;
 
 import java.util.Locale;
 import java.util.Map;
@@ -124,6 +125,23 @@ public enum XContentType implements MediaType {
         @Override
         public XContent xContent() {
             return CborXContent.cborXContent;
+        }
+    },
+
+    CSV(4) {
+        @Override
+        public String mediaTypeWithoutParameters() {
+            return "application/csv";
+        }
+
+        @Override
+        public String subtype() {
+            return "csv";
+        }
+
+        @Override
+        public XContent xContent() {
+            return CsvXContent.csvXContent;
         }
     };
 
