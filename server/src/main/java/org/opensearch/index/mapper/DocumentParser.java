@@ -32,8 +32,6 @@
 
 package org.opensearch.index.mapper;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexableField;
 import org.opensearch.OpenSearchParseException;
@@ -66,8 +64,6 @@ import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
  */
 final class DocumentParser {
 
-    private static final Logger logger = LogManager.getLogger(DocumentParser.class);
-
     private static final String[] NYC_HEADER_ARRAY = {
         "total_amount", "improvement_surcharge", "pickup_location", "pickup_datetime", "trip_type", "dropoff_datetime",
         "rate_code_id", "tolls_amount", "dropoff_location", "passenger_count", "fare_amount", "extra", "trip_distance",
@@ -92,10 +88,6 @@ final class DocumentParser {
         final Mapping mapping = docMapper.mapping();
         final ParseContext.InternalParseContext context;
         final XContentType xContentType = source.getXContentType();
-
-        logger.info("csvPoc::parseDocument => {}", mapping);
-        logger.info("csvPoc::parseDocument => {}", xContentType);
-        logger.info("csvPoc::parseDocument => {}", mapping.metadataMappersMap);
 
         try (
             XContentParser parser = XContentHelper.createParser(
@@ -418,7 +410,6 @@ final class DocumentParser {
 
         ObjectMapper.Nested nested = mapper.nested();
         if (nested.isNested()) {
-            logger.info("csvPoc::parseObjectOrNested => {}", true);
             context = nestedContext(context, mapper);
         }
 
@@ -428,8 +419,6 @@ final class DocumentParser {
         }
         if (token == XContentParser.Token.START_OBJECT) {
             // if we are just starting an OBJECT, advance, this is the object we are parsing, we need the name first
-            logger.info("csvPoc::parseDocument => {}", token);
-
             token = parser.nextToken();
         }
 
@@ -447,12 +436,9 @@ final class DocumentParser {
         String currentFieldName,
         XContentParser.Token token
     ) throws IOException {
-        logger.info("csvPoc::innerParseObject => token={}, currentName={}", token, parser.currentName());
         assert token == XContentParser.Token.FIELD_NAME || token == XContentParser.Token.END_OBJECT;
         String[] paths = null;
-        logger.info("csvPoc::innerParseObject => starting parsing");
         while (token != XContentParser.Token.END_OBJECT) {
-            logger.info("csvPoc::innerParseObject => token={}, currentName={}", token, parser.currentName());
             if (token == XContentParser.Token.FIELD_NAME) {
                 currentFieldName = parser.currentName();
                 paths = splitAndValidatePath(currentFieldName);
@@ -684,8 +670,6 @@ final class DocumentParser {
             );
         }
         Mapper mapper = getMapper(context, parentMapper, currentFieldName, paths);
-
-        logger.info("csvPoC::parseValue => currentFieldName={}, token={}, paths={}", currentFieldName, token, paths);
 
         if (currentFieldName.contains("csv_data_row")) {
             String[] mapperArray = {};
@@ -1040,14 +1024,12 @@ final class DocumentParser {
 
         for (int i = 0; i < values.length; ++i) {
             FieldMapper fieldMapper = (FieldMapper) parentMapper.getMapper(mapperArray[i]);
-            logger.info("csvPoC::parseCsvRow => fieldname={}, value={}, fieldMapper={}", mapperArray[i], values[i], fieldMapper);
 
             if (fieldMapper instanceof GeoPointFieldMapper) {
                 String[] val = values[i].substring(1, values[i].length() - 1).split(",");
                 List<GeoPoint> geoPoint = new ArrayList<>();
                 GeoPoint gp = new GeoPoint(Double.parseDouble(val[0]), Double.parseDouble(val[1]));
                 geoPoint.add(gp);
-                logger.info("csvPoC::parseCsvRow => geoPoint={}", geoPoint);
             } else {
                 ParseContext csvValueContext = context.createExternalValueContext(values[i]);
                 fieldMapper.parse(csvValueContext);
