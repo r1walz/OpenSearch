@@ -65,9 +65,10 @@ import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
 final class DocumentParser {
 
     private static final String[] NYC_HEADER_ARRAY = {
-        "total_amount", "improvement_surcharge", "pickup_location", "pickup_datetime", "trip_type", "dropoff_datetime",
-        "rate_code_id", "tolls_amount", "dropoff_location", "passenger_count", "fare_amount", "extra", "trip_distance",
-        "tip_amount", "store_and_fwd_flag", "payment_type", "mta_tax", "vendor_id"
+//        "total_amount", "improvement_surcharge", "pickup_location", "pickup_datetime", "trip_type", "dropoff_datetime",
+//        "rate_code_id", "tolls_amount", "dropoff_location", "passenger_count", "fare_amount", "extra", "trip_distance",
+//        "tip_amount", "store_and_fwd_flag", "payment_type", "mta_tax", "vendor_id"
+        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r"
     };
 
     private static final String[] SIMPLE_HEADER_ARRAY = {
@@ -1030,6 +1031,8 @@ final class DocumentParser {
                 List<GeoPoint> geoPoint = new ArrayList<>();
                 GeoPoint gp = new GeoPoint(Double.parseDouble(val[0]), Double.parseDouble(val[1]));
                 geoPoint.add(gp);
+                ParseContext csvValueContext = context.createExternalValueContext(geoPoint);
+                fieldMapper.parse(csvValueContext);
             } else {
                 ParseContext csvValueContext = context.createExternalValueContext(values[i]);
                 fieldMapper.parse(csvValueContext);
