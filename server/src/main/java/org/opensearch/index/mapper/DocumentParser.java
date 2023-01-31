@@ -65,10 +65,9 @@ import static org.opensearch.index.mapper.FieldMapper.IGNORE_MALFORMED_SETTING;
 final class DocumentParser {
 
     private static final String[] NYC_HEADER_ARRAY = {
-//        "total_amount", "improvement_surcharge", "pickup_location", "pickup_datetime", "trip_type", "dropoff_datetime",
-//        "rate_code_id", "tolls_amount", "dropoff_location", "passenger_count", "fare_amount", "extra", "trip_distance",
-//        "tip_amount", "store_and_fwd_flag", "payment_type", "mta_tax", "vendor_id"
-        "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r"
+       "total_amount", "improvement_surcharge", "pickup_location", "pickup_datetime", "trip_type", "dropoff_datetime",
+       "rate_code_id", "tolls_amount", "dropoff_location", "passenger_count", "fare_amount", "extra", "trip_distance",
+       "tip_amount", "store_and_fwd_flag", "payment_type", "mta_tax", "vendor_id"
     };
 
     private static final String[] SIMPLE_HEADER_ARRAY = {
