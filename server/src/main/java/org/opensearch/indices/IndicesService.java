@@ -150,6 +150,7 @@ import org.opensearch.node.Node;
 import org.opensearch.plugins.IndexStorePlugin;
 import org.opensearch.plugins.PluginsService;
 import org.opensearch.repositories.RepositoriesService;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
 import org.opensearch.search.internal.AliasFilter;
@@ -1010,6 +1011,15 @@ public class IndicesService extends AbstractLifecycleComponent
 
     public IndicesQueryCache getIndicesQueryCache() {
         return indicesQueryCache;
+    }
+
+    /**
+     * Increment count of category class of the status
+     *
+     * @param status {@link RestStatus} representing category class of the {@link org.opensearch.action.bulk.BulkItemResponse}
+     */
+    public void incrementDocStatusCounter(final RestStatus status) {
+        oldShardsStats.indexingStats.getTotal().getDocStatusStats().inc(status.getStatus());
     }
 
     /**

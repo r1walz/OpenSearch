@@ -114,6 +114,7 @@ public class TransportBulkActionTests extends OpenSearchTestCase {
                 new Resolver(),
                 new AutoCreateIndex(Settings.EMPTY, clusterService.getClusterSettings(), new Resolver(), new SystemIndices(emptyMap())),
                 new IndexingPressureService(Settings.EMPTY, clusterService),
+                null,
                 new SystemIndices(emptyMap())
             );
         }
