@@ -432,6 +432,13 @@ public enum RestStatus {
      */
     EXPECTATION_FAILED(417),
     /**
+     * Any attempt to brew coffee with a teapot should result in the error code "418 I'm a teapot". The resulting
+     * entity body MAY be short and stout.
+     * <p>
+     * @see <a href="https://www.rfc-editor.org/rfc/rfc2324#section-2.3.2">I'm a teapot!</a>
+     */
+    I_AM_A_TEAPOT(418),
+    /**
      * The request was directed at a server that is not able to produce a response. This can be sent by a server
      * that is not configured to produce responses for the combination of scheme and authority that are included
      * in the request URI.
@@ -558,5 +565,9 @@ public enum RestStatus {
      */
     public static RestStatus fromCode(int code) {
         return CODE_TO_STATUS.get(code);
+    }
+
+    public static Boolean isValidRestCode(int code) {
+        return fromCode(code) != null;
     }
 }

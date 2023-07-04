@@ -152,6 +152,7 @@ import org.opensearch.node.Node;
 import org.opensearch.plugins.IndexStorePlugin;
 import org.opensearch.plugins.PluginsService;
 import org.opensearch.repositories.RepositoriesService;
+import org.opensearch.rest.RestStatus;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.aggregations.support.ValuesSourceRegistry;
 import org.opensearch.search.internal.AliasFilter;
@@ -283,6 +284,43 @@ public class IndicesService extends AbstractLifecycleComponent
         "",
         Property.NodeScope,
         Property.Final
+    );
+
+    private static final List<String> INDEXING_DOC_STATUS_DEFAULT_KEYS = List.of(
+        "200",
+        "201",
+        "202",
+        "400",
+        "401",
+        "403",
+        "404",
+        "429",
+        "500",
+        "502",
+        "504"
+    );
+
+    private static String validateDocStatusKey(String key) {
+        int result;
+
+        try {
+            result = Integer.parseInt(key);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Illegal value for rest status code: " + key);
+        }
+
+        if (RestStatus.isValidRestCode(result)) {
+            return key;
+        } else {
+            throw new IllegalArgumentException("Illegal value for rest status code: " + key);
+        }
+    }
+
+    public static final Setting<List<String>> INDEXING_DOC_STATUS_KEYS_SETTING = Setting.listSetting(
+        "cluster.doc_status_keys",
+        INDEXING_DOC_STATUS_DEFAULT_KEYS,
+        IndicesService::validateDocStatusKey,
+        Property.NodeScope
     );
 
     /**
@@ -1013,6 +1051,14 @@ public class IndicesService extends AbstractLifecycleComponent
 
     public IndicesQueryCache getIndicesQueryCache() {
         return indicesQueryCache;
+    }
+
+    public void incrementDocStatusCounter(final RestStatus status) {
+        int code = status.getStatus();
+
+        if (INDEXING_DOC_STATUS_KEYS_SETTING.get(clusterService.getSettings()).contains(String.valueOf(code))) {
+            oldShardsStats.indexingStats.getTotal().getDocStatusStats().inc(code);
+        }
     }
 
     /**

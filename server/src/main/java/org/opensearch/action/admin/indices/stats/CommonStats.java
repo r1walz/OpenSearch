@@ -264,6 +264,43 @@ public class CommonStats implements Writeable, ToXContentFragment {
         recoveryStats = in.readOptionalWriteable(RecoveryStats::new);
     }
 
+    // public: visible for testing
+    public CommonStats(
+        DocsStats docs,
+        StoreStats store,
+        IndexingStats indexing,
+        GetStats get,
+        SearchStats search,
+        MergeStats merge,
+        RefreshStats refresh,
+        FlushStats flush,
+        WarmerStats warmer,
+        QueryCacheStats queryCache,
+        FieldDataStats fieldData,
+        CompletionStats completion,
+        SegmentsStats segments,
+        TranslogStats translog,
+        RequestCacheStats requestCache,
+        RecoveryStats recoveryStats
+    ) {
+        this.docs = docs;
+        this.store = store;
+        this.indexing = indexing;
+        this.get = get;
+        this.search = search;
+        this.merge = merge;
+        this.refresh = refresh;
+        this.flush = flush;
+        this.warmer = warmer;
+        this.queryCache = queryCache;
+        this.fieldData = fieldData;
+        this.completion = completion;
+        this.segments = segments;
+        this.translog = translog;
+        this.requestCache = requestCache;
+        this.recoveryStats = recoveryStats;
+    }
+
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeOptionalWriteable(docs);

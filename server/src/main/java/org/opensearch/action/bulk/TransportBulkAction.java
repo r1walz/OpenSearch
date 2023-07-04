@@ -80,6 +80,7 @@ import org.opensearch.index.VersionType;
 import org.opensearch.index.seqno.SequenceNumbers;
 import org.opensearch.index.shard.ShardId;
 import org.opensearch.indices.IndexClosedException;
+import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.SystemIndices;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.node.NodeClosedException;
@@ -130,6 +131,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
     private final IndexNameExpressionResolver indexNameExpressionResolver;
     private static final String DROPPED_ITEM_WITH_AUTO_GENERATED_ID = "auto-generated";
     private final IndexingPressureService indexingPressureService;
+    private final IndicesService indicesService;
     private final SystemIndices systemIndices;
 
     @Inject
@@ -144,6 +146,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         IndexNameExpressionResolver indexNameExpressionResolver,
         AutoCreateIndex autoCreateIndex,
         IndexingPressureService indexingPressureService,
+        IndicesService indicesService,
         SystemIndices systemIndices
     ) {
         this(
@@ -157,6 +160,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
             indexNameExpressionResolver,
             autoCreateIndex,
             indexingPressureService,
+            indicesService,
             systemIndices,
             System::nanoTime
         );
@@ -173,6 +177,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         IndexNameExpressionResolver indexNameExpressionResolver,
         AutoCreateIndex autoCreateIndex,
         IndexingPressureService indexingPressureService,
+        IndicesService indicesService,
         SystemIndices systemIndices,
         LongSupplier relativeTimeProvider
     ) {
@@ -188,6 +193,7 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
         this.client = client;
         this.indexNameExpressionResolver = indexNameExpressionResolver;
         this.indexingPressureService = indexingPressureService;
+        this.indicesService = indicesService;
         this.systemIndices = systemIndices;
         clusterService.addStateApplier(this.ingestForwarder);
     }
@@ -637,6 +643,8 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                             if (bulkItemResponse.getResponse() != null) {
                                 bulkItemResponse.getResponse().setShardInfo(bulkShardResponse.getShardInfo());
                             }
+
+                            indicesService.incrementDocStatusCounter(bulkItemResponse.status());
                             responses.set(bulkItemResponse.getItemId(), bulkItemResponse);
                         }
                         if (counter.decrementAndGet() == 0) {
@@ -649,15 +657,15 @@ public class TransportBulkAction extends HandledTransportAction<BulkRequest, Bul
                         // create failures for all relevant requests
                         for (BulkItemRequest request : requests) {
                             final String indexName = concreteIndices.getConcreteIndex(request.index()).getName();
-                            DocWriteRequest<?> docWriteRequest = request.request();
-                            responses.set(
+                            final DocWriteRequest<?> docWriteRequest = request.request();
+                            final BulkItemResponse bulkItemResponse = new BulkItemResponse(
                                 request.id(),
-                                new BulkItemResponse(
-                                    request.id(),
-                                    docWriteRequest.opType(),
-                                    new BulkItemResponse.Failure(indexName, docWriteRequest.id(), e)
-                                )
+                                docWriteRequest.opType(),
+                                new BulkItemResponse.Failure(indexName, docWriteRequest.id(), e)
                             );
+
+                            indicesService.incrementDocStatusCounter(bulkItemResponse.status());
+                            responses.set(request.id(), bulkItemResponse);
                         }
                         if (counter.decrementAndGet() == 0) {
                             finishHim();

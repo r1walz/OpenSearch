@@ -32,6 +32,7 @@
 
 package org.opensearch.action.admin.cluster.node.stats;
 
+import org.opensearch.action.admin.indices.stats.CommonStats;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.cluster.routing.WeightedRoutingStats;
 import org.opensearch.cluster.service.ClusterManagerThrottlingStats;
@@ -42,6 +43,8 @@ import org.opensearch.discovery.DiscoveryStats;
 import org.opensearch.cluster.coordination.PendingClusterStateStats;
 import org.opensearch.cluster.coordination.PublishClusterStateStats;
 import org.opensearch.http.HttpStats;
+import org.opensearch.index.shard.IndexingStats;
+import org.opensearch.indices.NodeIndicesStats;
 import org.opensearch.indices.breaker.AllCircuitBreakerStats;
 import org.opensearch.indices.breaker.CircuitBreakerStats;
 import org.opensearch.ingest.IngestStats;
@@ -65,6 +68,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -83,6 +87,31 @@ public class NodeStatsTests extends OpenSearchTestCase {
                 NodeStats deserializedNodeStats = new NodeStats(in);
                 assertEquals(nodeStats.getNode(), deserializedNodeStats.getNode());
                 assertEquals(nodeStats.getTimestamp(), deserializedNodeStats.getTimestamp());
+                if (nodeStats.getIndices() == null) {
+                    assertNull(deserializedNodeStats.getIndices());
+                } else {
+                    IndexingStats.Stats indexingStats = nodeStats.getIndices().getIndexing().getTotal();
+                    IndexingStats.Stats deserializedIndexingStats = deserializedNodeStats.getIndices().getIndexing().getTotal();
+
+                    assertEquals(indexingStats.getIndexCount(), deserializedIndexingStats.getIndexCount());
+                    assertEquals(indexingStats.getIndexTime(), deserializedIndexingStats.getIndexTime());
+                    assertEquals(indexingStats.getIndexCurrent(), deserializedIndexingStats.getIndexCurrent());
+                    assertEquals(indexingStats.getIndexFailedCount(), deserializedIndexingStats.getIndexFailedCount());
+                    assertEquals(indexingStats.getDeleteCount(), deserializedIndexingStats.getDeleteCount());
+                    assertEquals(indexingStats.getDeleteCurrent(), deserializedIndexingStats.getDeleteCurrent());
+                    assertEquals(indexingStats.getDeleteTime(), deserializedIndexingStats.getDeleteTime());
+                    assertEquals(indexingStats.getNoopUpdateCount(), deserializedIndexingStats.getNoopUpdateCount());
+                    assertEquals(indexingStats.isThrottled(), deserializedIndexingStats.isThrottled());
+                    assertEquals(indexingStats.getThrottleTime(), deserializedIndexingStats.getThrottleTime());
+
+                    Map<Integer, AtomicLong> indexingDocStatusCounter = indexingStats.getDocStatusStats().getDocStatusCounter();
+                    Map<Integer, AtomicLong> deserializedDocStatusCounter = deserializedIndexingStats.getDocStatusStats()
+                        .getDocStatusCounter();
+
+                    for (Integer key : indexingDocStatusCounter.keySet()) {
+                        assertEquals(indexingDocStatusCounter.get(key).longValue(), deserializedDocStatusCounter.get(key).longValue());
+                    }
+                }
                 if (nodeStats.getOs() == null) {
                     assertNull(deserializedNodeStats.getOs());
                 } else {
@@ -722,7 +751,7 @@ public class NodeStatsTests extends OpenSearchTestCase {
         return new NodeStats(
             node,
             randomNonNegativeLong(),
-            null,
+            createNodeIndicesStats(),
             osStats,
             processStats,
             jvmStats,
@@ -744,6 +773,40 @@ public class NodeStatsTests extends OpenSearchTestCase {
             null,
             null,
             null
+        );
+    }
+
+    private static NodeIndicesStats createNodeIndicesStats() {
+        if (rarely()) {
+            return null;
+        }
+
+        Map<Integer, AtomicLong> docStatusCounter = new HashMap<>();
+        int size = randomInt(5);
+
+        for (int i = 0; i < size; ++i) {
+            docStatusCounter.put(randomInt(), new AtomicLong(randomLong()));
+        }
+
+        IndexingStats.Stats.DocStatusStats docStatusStats = new IndexingStats.Stats.DocStatusStats(docStatusCounter);
+        IndexingStats.Stats stats = new IndexingStats.Stats(
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            Math.abs(randomInt()),
+            randomBoolean(),
+            Math.abs(randomInt()),
+            docStatusStats
+        );
+        IndexingStats indexingStats = new IndexingStats(stats);
+
+        return new NodeIndicesStats(
+            new CommonStats(null, null, indexingStats, null, null, null, null, null, null, null, null, null, null, null, null, null),
+            Collections.emptyMap()
         );
     }
 
