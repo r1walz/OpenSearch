@@ -612,23 +612,6 @@ public class LocalShardsBalancer extends ShardsBalancer {
                 if (targetNode != null) {
                     checkAndAddInEligibleTargetNode(targetNode.getRoutingNode());
                 }
-            } else if (moveDecision.isDecisionTaken() && moveDecision.canSplit()) {
-                final BalancedShardsAllocator.ModelNode sourceNode = nodes.get(shardRouting.currentNodeId());
-                sourceNode.removeShard(shardRouting);
-                IndexMetadata indexMetadata = metadata.getIndexSafe(shardRouting.index());
-                Tuple<ShardRouting, List<ShardRouting>> splittingShards = routingNodes.splitShard(
-                    shardRouting,
-                    indexMetadata,
-                    allocation.clusterInfo().getShardSize(shardRouting, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE),
-                    allocation.changes()
-                );
-                splittingShards.v2().forEach(sourceNode::addShard);
-                if (logger.isTraceEnabled()) {
-                    logger.trace("Splitting shard [{}]", shardRouting);
-                }
-
-                // Verifying if this node can be considered ineligible for further iterations
-                checkAndAddInEligibleTargetNode(sourceNode.getRoutingNode());
             } else if (moveDecision.isDecisionTaken() && moveDecision.canRemain() == false) {
                 logger.trace("[{}][{}] can't move", shardRouting.index(), shardRouting.id());
             }
@@ -795,6 +778,7 @@ public class LocalShardsBalancer extends ShardsBalancer {
             logger.trace("Start allocating unassigned shards");
         }
         if (unassigned.isEmpty()) {
+            assignSplitShards();
             return;
         }
 
@@ -914,6 +898,63 @@ public class LocalShardsBalancer extends ShardsBalancer {
             secondaryLength = 0;
         } while (primaryLength > 0);
         // clear everything we have either added it or moved to ignoreUnassigned
+
+        assignSplitShards();
+    }
+
+    private void assignSplitShards() {
+        for (BalancedShardsAllocator.ModelNode node : nodes.values()) {
+            for (ShardRouting shard : node.getRoutingNode()) {
+                if (shard.primary()&&  shard.started() &&
+                    allocation.metadata().getIndexSafe(shard.index()).isParentShard(shard.shardId())) {
+
+                    if (logger.isTraceEnabled()) {
+                        logger.trace("Splitting shard [{}]", shard);
+                    }
+
+                    final BalancedShardsAllocator.ModelNode sourceNode = nodes.get(shard.currentNodeId());
+                    final IndexMetadata indexMetadata = metadata.getIndexSafe(shard.index());
+                    final Tuple<ShardRouting, List<ShardRouting>> splittingShards = routingNodes.splitShard(
+                        shard,
+                        indexMetadata,
+                        allocation.clusterInfo().getShardSize(shard, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE),
+                        allocation.changes()
+                    );
+                    final List<ShardRouting> assignedShards = new ArrayList<>();
+
+                    boolean performCleanUp = false;
+
+                    for (ShardRouting childShard : splittingShards.v2()) {
+                        final AllocateUnassignedDecision allocationDecision = decideAllocateUnassigned(childShard);
+
+                        if (allocationDecision.getAllocationDecision() == AllocationDecision.YES) {
+                            if (logger.isTraceEnabled()) {
+                                logger.trace("Assigned shard [{}] to [{}]", childShard, sourceNode.getNodeId());
+                            }
+
+                            // Allocation decision should be YES only on sourceNode due to decider
+                            sourceNode.addShard(childShard);
+                            assignedShards.add(childShard);
+                            checkAndAddInEligibleTargetNode(sourceNode.getRoutingNode());
+                        } else {
+                            performCleanUp = true;
+                            break;
+                        }
+                    }
+
+                    if (performCleanUp) {
+                        for (ShardRouting childShard : assignedShards) {
+                            if (logger.isTraceEnabled()) {
+                                logger.trace("Unassigned shard [{}] from [{}]", childShard, sourceNode);
+                            }
+                            sourceNode.removeShard(childShard);
+                        }
+                    } else {
+                        sourceNode.removeShard(shard);
+                    }
+                }
+            }
+        }
     }
 
     /**
